@@ -13,9 +13,9 @@
 -- distributed under the License is distributed on an "AS IS" BASIS,
 -- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 -- See the License for the specific language governing permissions and
--- limitations under the License.  
+-- limitations under the License.
 
-TURBO_SSL = true -- Enable SSL
+_G.TURBO_SSL = true -- Enable SSL
 local turbo = require "turbo"
 turbo.log.categories.success = false
 
@@ -26,7 +26,7 @@ local tio = turbo.ioloop.instance()
 tio:add_callback(function()
     -- Must place everything in a IOLoop callback.
     local res = coroutine.yield(
-        turbo.async.HTTPClient():fetch(url, {verify=true, allow_redirects=true}))
+        turbo.async.HTTPClient():fetch(url, {allow_redirects=true}))
     if res.error or res.headers:get_status_code() ~= 200 then
         -- Check for errors.
         tio:close()

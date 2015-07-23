@@ -17,6 +17,7 @@
 -- limitations under the License.
 
 local iostream =            require "turbo.iostream"
+local platform =            require "turbo.platform"
 local ioloop =              require "turbo.ioloop"
 local httputil =            require "turbo.httputil"
 local util =                require "turbo.util"
@@ -31,7 +32,11 @@ local crypto =              require "turbo.crypto"
 require "turbo.3rdparty.middleclass"
 
 local unpack = util.funpack
-local AF_INET = socket.AF_INET
+local AF_INET
+if platform.__LINUX__ then
+    AF_INET = socket.AF_INET
+end
+
 
 local async = {} -- async namespace
 
@@ -126,7 +131,10 @@ function async.HTTPClient:initialize(ssl_options, io_loop, max_buffer_size)
     self.family = AF_INET
     self.io_loop = io_loop or ioloop.instance()
     self.max_buffer_size = max_buffer_size
-    self.ssl_options = ssl_options
+    self.ssl_options = ssl_options or {}
+    if self.ssl_options.verify_ca == nil then
+        self.ssl_options.verify_ca = true
+    end
 end
 
 --- Errors that can be set in the return object of fetch (HTTPResponse instance).
@@ -183,7 +191,7 @@ function async.HTTPClient:fetch(url, kwargs)
     -- Set sane defaults for kwargs if not present.
     self.redirect_max = self.kwargs.max_redirects or 4
     self.kwargs.method = self.kwargs.method or "GET"
-    self.kwargs.user_agent = self.kwargs.user_agent or "Turbo Client v1.1.0"
+    self.kwargs.user_agent = self.kwargs.user_agent or "Turbo Client v2.0.0"
     self.kwargs.connect_timeout = self.kwargs.connect_timeout or 30
     self.kwargs.request_timeout = self.kwargs.request_timeout or 60
     if self:_set_url(url) == -1 then
@@ -276,13 +284,11 @@ function async.HTTPClient:_connect()
             -- It is a available optimizations if the user wants to avoid
             -- recreating new SSL contexts for every fetch.
             self.ssl_options = self.ssl_options or {}
-            crypto.ssl_init()
             local rc, ctx_or_err = crypto.ssl_create_client_context(
                 self.ssl_options.priv_key,
                 self.ssl_options.cert_key,
                 self.ssl_options.ca_path,
-                self.ssl_options.verify_ca ~= nil and
-                    self.ssl_options.verify_ca or true)
+                self.ssl_options.verify_ca)
             if rc ~= 0 then
                 self:_throw_error(errors.SSL_ERROR,
                     string.format("Could not create SSL context. %s",
@@ -308,8 +314,7 @@ function async.HTTPClient:_connect()
             self.hostname,
             self.port,
             self.family,
-            self.ssl_options.verify_ca ~= nil and
-                    self.ssl_options.verify_ca or true,
+            self.ssl_options.verify_ca,
             self._handle_connect,
             self._handle_connect_fail,
             self)
@@ -346,8 +351,7 @@ function async.HTTPClient:_connect()
                     self.ssl_options.priv_key,
                     self.ssl_options.cert_key,
                     self.ssl_options.ca_path,
-                    self.ssl_options.verify_ca ~= nil and
-                        self.ssl_options.verify_ca or true)
+                    self.ssl_options.verify_ca)
                 if rc ~= 0 then
                     self:_throw_error(errors.SSL_ERROR,
                         string.format("Could not create SSL context. %s",
@@ -357,7 +361,7 @@ function async.HTTPClient:_connect()
                 self.ssl_options._ssl_ctx = ctx_or_err
                 self.ssl_options._type = 1
             end
-            if not self.poron_headerst then
+            if not self.port then
                 self.port = 443
             end
             self.iostream = iostream.SSLIOStream(
@@ -369,8 +373,7 @@ function async.HTTPClient:_connect()
                 self.hostname,
                 self.port,
                 self.family,
-                self.ssl_options.verify_ca ~= nil and
-                        self.ssl_options.verify_ca or true,
+                self.ssl_options.verify_ca,
                 self._handle_connect,
                 self._handle_connect_fail,
                 self)
@@ -420,7 +423,7 @@ function async.HTTPClient:_prepare_http_request()
         if type(self.kwargs.cookie) == "table" then
             local cookie_str = ""
             for k,v in pairs(self.kwargs.cookie) do
-                cookie_str = cookie_str .. string.format("%s=\"%s\"; ", k, v)
+                cookie_str = cookie_str .. string.format("%s=%s; ", k, v)
             end
             self.headers:add("Cookie", cookie_str)
         end
@@ -630,6 +633,7 @@ function async.HTTPClient:_handle_redirect(location)
         end
         self.sock = sock
         self:_connect()
+        return
     end
     self:_send_http_request()
 end
@@ -677,6 +681,16 @@ function async.HTTPClient:_finalize_request()
         if (res_code == 301 or res_code == 302) and self.kwargs.allow_redirects and
                 self.redirect < self.redirect_max then
             local redirect_loc = self.response_headers:get("Location", true)
+            if redirect_loc:match("^/.*") then
+                -- If Location header starts with /, treat it as a redirect to
+                -- the same schema, hostname and port, where Location is the 
+                -- path.
+                redirect_loc = string.format("%s://%s:%d%s",
+                    self.schema,
+                    self.hostname,
+                    self.port,
+                    redirect_loc)
+            end
             if redirect_loc then
                 self:_handle_redirect(redirect_loc)
                 return

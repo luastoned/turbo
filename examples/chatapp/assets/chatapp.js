@@ -24,7 +24,7 @@ function write_to_chatwindow (msg, time, cl) {
     ("0" + time.getSeconds()).slice(-2);
 
     var class_str = cl ? "class=\"" + cl + "\"": "";
-    
+
     $("#chat-window").
         append("<p "+class_str+">["+ time_str + "] "+ msg +"</p>").
         animate({scrollTop: $("#chat-window").height()}, "fast");
@@ -42,7 +42,7 @@ function update_participants (t) {
 function connect_to_chatcom () {
     $(".connected").removeClass("hidden");
     $("#chat-input").click();
-    var ws = new WebSocket("ws://127.0.0.1:8888/chatcom");
+    var ws = new WebSocket("ws://" + document.location.host + "/chatcom");
     ws.onmessage = function(evt) {
         var msg = JSON.parse(evt.data);
         var pack = msg.package;
@@ -86,13 +86,13 @@ function connect_to_chatcom () {
 
 function do_login () {
     $('#login').modal('show');
-    
+
     $("#chat-login-nick").keyup(function (event) {
         if (event.keyCode == 13){
             $("#chat-login-btn").click();
         }
     });
-       
+
     $("#chat-login-btn").click(function(){
         $.ajax({
             type: "POST",

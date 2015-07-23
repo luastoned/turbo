@@ -14,7 +14,7 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-
+_G.__TURBO_USE_LUASOCKET__ = os.getenv("TURBO_USE_LUASOCKET") and true or false
 local turbo = require "turbo"
 
 describe("turbo.async Namespace", function()
@@ -27,7 +27,7 @@ describe("turbo.async Namespace", function()
                 cb(cb_arg,1,100,200,300,800)
             end)
         end
-        
+
         -- Only global instance is supported for this convinience function.
         io:add_callback(function()
             local r1,r2,r3,r4,r5 = coroutine.yield (turbo.async.task(typical_cb_func, 1234))

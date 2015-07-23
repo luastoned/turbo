@@ -19,6 +19,10 @@ local bit = require "bit"
 local turbo = require "turbo"
 local fs = require "turbo.fs"
 
+if not turbo.platform.__LINUX__ then
+    error("Turbovisor is only supported on Linux.")
+end
+
 --- Parsing arguments for turbovisor
 -- @param arg All command line input. Note arg[0] is 'turbovisor', arg[1] is
 --    application name; so user-defined argument starts from arg[2]
@@ -30,10 +34,10 @@ local function get_param(arg)
     local arg_tbl = {}
     for i = 2, #arg, 1 do
         if arg[i] == '--watch' or arg[i] == '-w' then
-            arg_tbl.watch = {}
+            arg_tbl.watch = arg_tbl.watch or {}
             arg_opt = 'watch'
         elseif arg[i] == '--ignore' or arg[i] == '-i' then
-            arg_tbl.ignore = {}
+            arg_tbl.ignore = arg_tbl.ignore or {}
             arg_opt = 'ignore'
         else
             if string.sub(arg[i], 1, 2) == "./" then
@@ -53,18 +57,11 @@ local function get_param(arg)
     return arg_tbl;
 end
 
+
 --- Kill all descendants for a given pid
 local function kill_tree(pid)
-    local status = ffi.new("int[1]")
-    local cpids = io.popen('pgrep -P ' .. pid)
-    for cpid in cpids:lines() do
-        kill_tree(cpid)
-        ffi.C.kill(tonumber(cpid), 9)
-        ffi.C.waitpid(tonumber(cpid), status, 0)
-        assert(status[0] == 9 or bit.band(status[0], 0x7f) == 0,
-               "Child process " .. cpid .. " not killed.")
-    end
-    cpids:close()
+    local file_handle = io.popen('pkill -P ' .. pid)
+    file_handle:close()
 end
 
 
@@ -122,6 +119,9 @@ function turbovisor.restart(self, fd, events)
         full_path = path .. '/' .. ffi.string(self.buf.name)
         if path == '.' then full_path = ffi.string(self.buf.name) end
     end
+
+    turbo.inotify:rewatch_if_ignored(self.buf, full_path)
+
     -- Simply return if we need to ignore the file
     if turbo.util.is_in(full_path, self.arg_tbl.ignore) then
         return

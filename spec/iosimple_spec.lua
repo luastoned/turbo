@@ -1,6 +1,6 @@
--- Turbo Unit test
+--- Turbo.lua Unit test
 --
--- Copyright 2013 John Abrahamsen
+-- Copyright 2015 John Abrahamsen
 --
 -- Licensed under the Apache License, Version 2.0 (the "License");
 -- you may not use this file except in compliance with the License.
@@ -14,11 +14,14 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-local turbo = require "turbo"
+local turbo = require 'turbo'
 
-describe("turbo.hash Namespace", function()
-    it("SHA1 class", function()
-    	local hash = turbo.hash.SHA1("lol")	
-    	assert.equal(hash:hex(), "403926033d001b5279df37cbbe5287b7c7c267fa")
-    end)
-end)
+turbo.ioloop.instance():add_callback(function()
+    local stream = turbo.iosimple.dial("tcp://turbolua.org:80")
+
+    stream:write("GET / HTTP/1.0\r\n\r\n")
+    local data = stream:read_until_close()
+
+    turbo.ioloop.instance():close()
+end):start()
+
